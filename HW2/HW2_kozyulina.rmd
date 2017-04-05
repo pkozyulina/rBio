@@ -1,0 +1,105 @@
+---
+title: "Clustering"
+author: "Polina Kozyulina"
+date: "April 5, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(DESeq2)
+library(ggplot2)
+library(pheatmap)
+library(amap)
+library(dbscan)
+library(dplyr)
+options(width=120)
+```
+
+## Reading data
+
+
+```{r counts}
+setwd("/media/polina/305622A3562269B4/bioR/03-25-17/rbio")
+counts <- read.csv("GSE89225_Illumina_counts.csv", row.names=1)
+conditions <- read.csv("conditions.csv", row.names=1)
+
+# excluding outlier
+counts_2 <- as_data_frame(select(counts, -treg_NBP_patient3))
+conditions_2 <- conditions[rownames(conditions) != "treg_NBP_patient3", ]
+samples <- rownames(conditions)
+```
+
+## DESeq objects
+
+```{r deseq_prep, cache=TRUE, message=FALSE}
+## Cache True so it wouldn't redo this chunk every time you reload Rmd
+dds <- DESeqDataSetFromMatrix(countData = counts, colData = conditions, design = ~ tissue + cells)
+dds <- dds[order(rowSums(counts(dds)), decreasing = T), ]
+dds <- dds[1:8000, ]
+log_dds <- rlog(dds)
+
+
+# without outlier
+dds_2 <- DESeqDataSetFromMatrix(countData = counts_2, colData = conditions_2, design = ~ tissue + cells)
+dds_2 <- dds_2[order(rowSums(counts(dds_2)), decreasing = T), ]
+dds_2 <- dds_2[1:8000, ]
+log_dds_2 <- rlog(dds_2)
+
+```
+
+## Задание 1: иерархическая кластеризация
+
+```{r cor, message=FALSE}
+mat <- cor(assay(log_dds)) # matrix of  similarity
+mat_unsim <- 1 - cor(assay(log_dds)) # matrix of unsimilarity
+dists <- dist(t(mat_unsim))
+clusters_avg <- hclust(dists, method = "average")
+clusters_com <- hclust(dists, method = "complete")
+clusters_sing <- hclust(dists, method = "single")
+
+plot(clusters_avg)
+plot(clusters_com)
+plot(clusters_sing)
+```
+
+## Задание 2: K-means
+
+```{r kmeans, cache=TRUE, message=FALSE, fig.height=10}
+
+clustering <- Kmeans(assay(log_dds_2)[order(rownames(assay(log_dds_2))), ], 6, method="correlation", iter.max=20000)
+clusters <- as.data.frame(clustering$cluster)
+clusters$cluster <- as.factor(clustering$cluster)
+clusters$`clustering$cluster` <- NULL
+
+to_visualise <- as.data.frame(assay(log_dds_2))[order(rownames(assay(log_dds_2))), ]
+to_visualise <- to_visualise[order(clustering$cluster),  ]
+to_visualise <- to_visualise[ , order(conditions_2[, 2], conditions_2[, 1])]
+
+
+to_visualise_merged <- t(apply(to_visualise, 1, function(r) { (r - min(r)) / (max(r) - min(r)) }))
+
+pheatmap(to_visualise_merged, 
+         show_rownames = F, cluster_rows = F,
+         cluster_cols=F,
+         annotation_col = conditions_2,
+         annotation_row = clusters)
+
+```
+
+
+## Density based algortihms
+
+
+```{r dbscan, message=FALSE}
+projection <- read.csv("projection.csv", row.names=1)
+plot(projection)
+
+cl <- dbscan(projection, eps = 3)
+projection$cluster <- as.factor(cl$cluster)
+
+ggplot(projection, aes(x = TSNE.1, y = TSNE.2, col = cluster)) +
+  geom_point()
+
+```
+
