@@ -1,0 +1,215 @@
+---
+title: "ClassWork"
+author: "Polina Kozyulina"
+date: "April 8, 2017"
+output: html_document
+---
+
+```{r setup, message=FALSE}
+library(DESeq2)
+library(ggplot2)
+library(ggrepel)
+library(pheatmap)
+library(VennDiagram)
+library(amap)
+library(dbscan)
+library(dplyr)
+options(width=150)
+setwd('/media/polina/305622A3562269B4/rBio')
+```
+
+#Читаем датасеты:
+
+```{r load, cache=TRUE}
+# reading data
+counts <- read.csv("GSE89633_counts.tsv", row.names=1, sep = '\t')
+conditions <- read.csv("GSE89633_conditions.tsv", sep = '\t', row.names=1)
+
+```
+
+
+
+```{r deseq_prep, cache=TRUE, message=FALSE}
+## Cache True so it wouldn't redo this chunk every time you reload Rmd
+
+# Wild type (WT) vs double knockout (DKO)
+dds <- DESeqDataSetFromMatrix(countData = counts,
+                              colData = conditions,
+                              design =  ~ cells + conditions) # 
+dds <- dds[rowSums(counts(dds)) > 20, ]
+dds <- DESeq(dds)
+vst_dds <- varianceStabilizingTransformation(dds) # variance stabilizing transformation
+counts.norm <- assay(vst_dds)
+
+
+# for Kmeans
+
+dds_k <- dds[order(rowSums(counts(dds)), decreasing = T), ]
+dds_k <- dds_k[1:8000, ]
+log_dds_k <- rlog(dds_k)
+
+```
+
+# Строим красивый PCA
+
+```{r PCA}
+pca_data <- prcomp(t(counts.norm))
+percents <- pca_data$sdev^2 / sum(pca_data$sdev^2)
+to_plot <- t(counts.norm) %*% pca_data$rotation
+
+gdata <- data.frame(
+  x=to_plot[, 1],
+  y=to_plot[, 2],
+  tissue=conditions[, 1],
+  cells=conditions[, 2],
+  name=rownames(conditions)
+)
+
+ggplot(data=gdata, aes(x=x, y=y, color=cells, shape=tissue, text=name)) +
+  geom_point(size=3) + theme_bw()  +
+  xlab(paste0("PC", 1, ": ", formatC(100 * percents[1], digits=4), "%")) +
+  ylab(paste0("PC", 2, ": ", formatC(100 * percents[2], digits=4), "%")) #+
+  #geom_text_repel(data=gdata,aes(label=rownames(gdata)))
+
+```
+
+И получаем красивую картинку, где больша часть вариации объясняется типом клеток. Откровенных выделенцев я тут не вижу, все образцы хорошо группируются по клеточному типу, и при этом, отчасти, могу быть разделены по условию, что мы и проверим ниже. 
+__PS:__ В целом, почти идеальный датасет в этом плане, я считаю.
+
+# K-means
+
+```{r kmeans, cache=TRUE, message=FALSE, fig.height=10}
+
+clustering <- Kmeans(assay(log_dds_k)[order(rownames(assay(log_dds_k))), ], 11, method="correlation", iter.max=20000)
+clusters <- as.data.frame(clustering$cluster)
+clusters$cluster <- as.factor(clustering$cluster)
+clusters$`clustering$cluster` <- NULL
+
+to_visualise <- as.data.frame(assay(log_dds_k))[order(rownames(assay(log_dds_k))), ]
+to_visualise <- to_visualise[order(clustering$cluster),  ]
+to_visualise <- to_visualise[ , order(conditions[, 2], conditions[, 1])]
+
+
+to_visualise_merged <- t(apply(to_visualise, 1, function(r) { (r - min(r)) / (max(r) - min(r)) }))
+
+pheatmap(to_visualise_merged, 
+         show_rownames = F, cluster_rows = F,
+         cluster_cols=F,
+         annotation_col = conditions,
+         annotation_row = clusters)
+
+```
+
+# Differential expression
+
+```{r diff_exp}
+# FB WT vs FB DKO
+cond1 <- conditions["cell type: FB" == conditions$cells ,]
+counts1 <- counts[, rownames(cond1)]
+
+dds1 <- DESeqDataSetFromMatrix(countData = counts1,
+                              colData = cond1,
+                              design = ~ conditions) # 
+dds1 <- dds1[rowSums(counts(dds1)) > 20, ]
+dds1 <- DESeq(dds1)
+
+
+# FAP WT vs FAP DKO
+cond2 <- conditions["cell type: FAP" == conditions$cells ,]
+counts2 <- counts[, rownames(cond2)]
+
+dds2 <- DESeqDataSetFromMatrix(countData = counts2,
+                              colData = cond2,
+                              design = ~ conditions) # 
+dds2 <- dds2[rowSums(counts(dds2)) > 20, ]
+dds2 <- DESeq(dds2)
+
+# SMP WT vs SMP DKO
+cond3 <- conditions["cell type: SMP" == conditions$cells ,]
+counts3 <- counts[, rownames(cond3)]
+
+dds3 <- DESeqDataSetFromMatrix(countData = counts3,
+                              colData = cond3,
+                              design = ~ conditions) # 
+dds3 <- dds3[rowSums(counts(dds3)) > 20, ]
+dds3 <- DESeq(dds3)
+
+# FB WT vs FB DKO
+res1_pre <- results(dds1)
+mcols(res1_pre)$description
+res1 <- res1_pre[order(res1_pre[, 4]), ]
+res1
+
+# FAP WT vs FAP DKO
+res2_pre <- results(dds2)
+mcols(res2_pre)$description
+res2 <- res2_pre[order(res2_pre[, 4]), ]
+res2
+
+# SMP WT vs SMP DKO
+res3_pre <- results(dds3)
+mcols(res3_pre)$description
+res3 <- res3_pre[order(res3_pre[, 4]), ]
+res3
+
+
+```
+
+# Volcano plot
+Строим волкано-плоты для разных типов клеток WT vs KDO. Мы видим, что действительно, достаточно много геном экспрессируются дифференциально. По идее, чем больше точек у нас стало красными на волкано и чем шире плот раскинул свои "рукава", тем больше генов изменило уровень экспрессии и тем сильнее они ее изменили соответственно. Я бы сказала, что больше всего была реакция на двойной нокаут в клетках фибробластов FB, однако оценка "на глаз" это показатель, которому я бы не довеляла на 100%. 
+
+```{r volcano_plot}
+
+# FB WT vs FB DKO
+gdata1 <- data.frame(x=res1$log2FoldChange, y=-log10(res1$padj), exp = "FB: WT vs DKO")
+
+# FAP WT vs FAP DKO
+gdata2 <- data.frame(x=res2$log2FoldChange, y=-log10(res2$padj), exp = "FAP: WT vs DKO")
+
+# SMP WT vs SMP DKO
+gdata3 <- data.frame(x=res3$log2FoldChange, y=-log10(res3$padj), exp = "SMT: WT vs DKO")
+
+# Combining
+gdata_full <- as.data.frame(rbind(gdata1, gdata2, gdata3))
+gdata_full <- gdata_full[complete.cases(gdata_full), ]
+gdata_full$Significance <- ifelse(gdata_full$y > -log10(0.01), "Significant", "Not significant")
+gdata_full$Significance <- as.factor(gdata_full$Significance)
+
+ggplot(data=gdata_full, aes(x=x, y=y, col=Significance)) +
+  geom_point(size=1) + theme_bw()  +
+  xlab("Log fold change") +
+  ylab("Adjusted p.value") +
+  facet_grid(exp ~ .) +
+  geom_hline(yintercept=-log10(0.01), col = 'red', linetype = 'dashed') +
+  scale_color_manual(values = c('black', 'red'))
+```
+
+# Тройная диаграмма Вена
+
+```{r VennDiagram}
+FB <- rownames(res1[res1$padj < 0.01 & !is.na(res1$padj), ])
+
+FAP <- rownames(res2[res2$padj < 0.01 & !is.na(res2$padj), ])
+
+SMP <- rownames(res3[res3$padj < 0.01 & !is.na(res3$padj), ])
+
+commonLetters_12 <- intersect(FB, FAP)
+commonLetters_23 <- intersect(FB, SMP)
+commonLetters_13 <- intersect(SMP, FAP)
+commonLetters_123 <- intersect(SMP, commonLetters_12)
+
+
+draw.triple.venn(length(FB), 
+                   length(FAP), 
+                   length(SMP), 
+                   length(commonLetters_12),
+                   length(commonLetters_23),
+                   length(commonLetters_13), 
+                   length(commonLetters_123),
+                   category = c("FB", "FAP", "SMP"),
+                   fill = c("cyan", "violet", "yellow"),
+                   lty = "blank")
+
+```
+
+
