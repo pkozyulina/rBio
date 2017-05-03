@@ -1,20 +1,23 @@
 ---
-title: "sql intro"
+title: "sql_hw3"
 author: "PKozyulina"
 date: "April 15, 2017"
-output: html_document
+output:
+  html_document:
+    fig_height: 7
+    fig_width: 12
 ---
 ## Библиотеки, которые нам понадобятся
-```{r libs, warning=F, message=F}
-options(width = 160)
+```{r libs}
+options(width = 180)
 library(RSQLite)
 library(DBI)
-setwd('/media/polina/305622A3562269B4/bioR/HW_SQL')
+
 ```
 
 ## Загружаем данные
 
-```{r setup, warning=FALSE, message=F, cache=TRUE}
+```{r setup, warning=FALSE, message=F}
 
 # connecting to db
 mydb <- dbConnect(RSQLite::SQLite(), "data.sqlite") # open connection to the database
@@ -26,6 +29,7 @@ dbListTables(mydb)
 #### Перечислить пользователей в алфавитном порядке username (все колонки в любом порядке)
 
 ```{r alphabetical users}
+
 dbGetQuery(mydb, "SELECT * FROM  Users ORDER BY username;")
 
 ```
@@ -35,7 +39,7 @@ dbGetQuery(mydb, "SELECT * FROM  Users ORDER BY username;")
 
 ```{r 5_users_last}
 
-head(dbGetQuery(mydb, "SELECT * FROM  Users ORDER BY registered DESC;"), 5)
+dbGetQuery(mydb, "SELECT * FROM  Users ORDER BY registered DESC LIMIT 5;")
 
 ```
 
@@ -45,10 +49,11 @@ head(dbGetQuery(mydb, "SELECT * FROM  Users ORDER BY registered DESC;"), 5)
 
 ```{r 5_max_listened}
 
-head(dbGetQuery(mydb, "SELECT user_id, count(song_id), start_time 
+dbGetQuery(mydb, "SELECT user_id, count(song_id), start_time 
                 FROM Listened 
                 GROUP BY user_id 
-                ORDER BY count(song_id) DESC"), 5)
+                ORDER BY count(song_id) DESC
+                LIMIT 5")
 ```
 
 
@@ -84,12 +89,13 @@ dbGetQuery(mydb, "SELECT Artists.name as Artist, count(DISTINCT Songs.id) as Son
 
 ```{r artist_album_date}
 
-head(dbGetQuery(mydb, "SELECT Artists.name as Artist, Albums.name as Album, count(DISTINCT Songs.id) Songs 
+dbGetQuery(mydb, "SELECT Artists.name as Artist, Albums.name as Album, count(DISTINCT Songs.id) Songs 
                 FROM Albums 
                 JOIN Artists ON Artists.id = Albums.artist_id 
                 JOIN Songs On Albums.id = Songs.album_id 
                 GROUP BY album_id 
-                ORDER BY Songs DESC"), 1)
+                ORDER BY Songs DESC
+                LIMIT 1")
 
 ```
 
@@ -98,12 +104,13 @@ head(dbGetQuery(mydb, "SELECT Artists.name as Artist, Albums.name as Album, coun
 
 ```{r artist_album_longest}
 
-head(dbGetQuery(mydb, "SELECT Artists.name as Artist, Albums.name as Album, total(Songs.duration) as Duration 
+dbGetQuery(mydb, "SELECT Artists.name as Artist, Albums.name as Album, total(Songs.duration) as Duration 
                 FROM Albums 
                 JOIN Artists ON Artists.id = Albums.artist_id 
                 JOIN Songs ON Albums.id = Songs.album_id 
                 GROUP BY album_id 
-                ORDER BY Duration DESC"), 1)
+                ORDER BY Duration DESC
+                LIMIT 1")
 
 ```
 
@@ -112,12 +119,13 @@ head(dbGetQuery(mydb, "SELECT Artists.name as Artist, Albums.name as Album, tota
 
 ```{r artist_album_longest_average_song}
 
-head(dbGetQuery(mydb, "SELECT Artists.name as Artist, Albums.name as Album, total(Songs.duration)/count(Songs.duration) as Mean_Duration 
+dbGetQuery(mydb, "SELECT Artists.name as Artist, Albums.name as Album, total(Songs.duration)/count(Songs.duration) as Mean_Duration 
                 FROM Albums 
                 JOIN Artists ON Artists.id = Albums.artist_id 
                 JOIN Songs On Albums.id = Songs.album_id 
                 GROUP BY album_id 
-                ORDER BY Mean_Duration DESC"), 1)
+                ORDER BY Mean_Duration DESC
+                LIMIT 5")
 
 ```
 
@@ -127,7 +135,7 @@ head(dbGetQuery(mydb, "SELECT Artists.name as Artist, Albums.name as Album, tota
 
 ```{r artist_album_top_songs}
 
-head(dbGetQuery(mydb, "SELECT 
+dbGetQuery(mydb, "SELECT 
                 Artists.name as Artist, 
                 Albums.name as Album, 
                 Songs.name as Song, 
@@ -137,7 +145,8 @@ head(dbGetQuery(mydb, "SELECT
                 JOIN Songs On Albums.id = Songs.album_id 
                 JOIN Listened ON Songs.id = Listened.song_id 
                 GROUP BY Listened.song_id 
-                ORDER BY Listened_times DESC"), 1)
+                ORDER BY Listened_times DESC
+                LIMIT 5")
 
 ```
 
@@ -146,7 +155,7 @@ head(dbGetQuery(mydb, "SELECT
 
 ```{r popular_year}
 
-head(dbGetQuery(mydb, "SELECT 
+dbGetQuery(mydb, "SELECT 
                 Albums.release_year, 
                 count(Listened.song_id) as Listened_times 
                 FROM Albums 
@@ -154,7 +163,8 @@ head(dbGetQuery(mydb, "SELECT
                 JOIN Songs On Albums.id = Songs.album_id 
                 JOIN Listened ON Songs.id = Listened.song_id 
                 GROUP BY Albums.release_year 
-                ORDER BY Listened_times DESC"), 1)
+                ORDER BY Listened_times DESC
+                LIMIT 1")
 
 ```
 
@@ -164,7 +174,7 @@ head(dbGetQuery(mydb, "SELECT
 
 ```{r id_47}
 
-head(dbGetQuery(mydb, "SELECT 
+dbGetQuery(mydb, "SELECT 
                 Artists.name as Artist,
                 Albums.name as Album,
                 Songs.name as Song,
@@ -175,7 +185,8 @@ head(dbGetQuery(mydb, "SELECT
                 JOIN Listened ON Songs.id = Listened.song_id 
                 JOIN Users ON Users.id = Listened.user_id
                 WHERE  Users.id = 47
-                ORDER BY Time DESC"), 20)
+                ORDER BY Time DESC
+                LIMIT 20")
 
 ```
 
@@ -184,7 +195,7 @@ head(dbGetQuery(mydb, "SELECT
 
 ```{r everything}
 
-head(dbGetQuery(mydb, "SELECT
+dbGetQuery(mydb, "SELECT
                 Users.username as Username,
                 Artists.name as Artist,
                 Albums.name as Album,
@@ -195,6 +206,7 @@ head(dbGetQuery(mydb, "SELECT
                 JOIN Songs On Albums.id = Songs.album_id 
                 JOIN Listened ON Songs.id = Listened.song_id 
                 JOIN Users ON Users.id = Listened.user_id
-                GROUP BY Users.username, Artists.name, Albums.name, Songs.id"), 30)
+                GROUP BY Users.username, Artists.name, Albums.name, Songs.id
+                LIMIT 40")
 dbDisconnect(mydb)
 ```
