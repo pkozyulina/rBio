@@ -12,8 +12,8 @@ library(ggplot2)
 setwd('/media/polina/305622A3562269B4/bioR/RandomForest/random_forest_hw')
 ```
 
-## Предподготовка данных
-Читаем таблицы и готовим данные. Считаем коэффициенты корелляции для возраста и всех сайтов метилирования, и выбираем 10 наиболее значимых сайтов.
+## РџСЂРµРґРїРѕРґРіРѕС‚РѕРІРєР° РґР°РЅРЅС‹С…
+Р§РёС‚Р°РµРј С‚Р°Р±Р»РёС†С‹ Рё РіРѕС‚РѕРІРёРј РґР°РЅРЅС‹Рµ. РЎС‡РёС‚Р°РµРј РєРѕСЌС„С„РёС†РёРµРЅС‚С‹ РєРѕСЂРµР»Р»СЏС†РёРё РґР»СЏ РІРѕР·СЂР°СЃС‚Р° Рё РІСЃРµС… СЃР°Р№С‚РѕРІ РјРµС‚РёР»РёСЂРѕРІР°РЅРёСЏ, Рё РІС‹Р±РёСЂР°РµРј 10 РЅР°РёР±РѕР»РµРµ Р·РЅР°С‡РёРјС‹С… СЃР°Р№С‚РѕРІ.
 
 ```{r data_setup, message=FALSE, warning=FALSE}
 
@@ -23,36 +23,38 @@ head(ages)
 methylation <- read.table("methylation.tsv", sep="\t", header=1, row.names = 1, na.strings = "NA")
 print(methylation[1:5, 1:5])
 
-# заменяем NA на нули
+# Р·Р°РјРµРЅСЏРµРј NA РЅР° РЅСѓР»Рё
 methylation[is.na(methylation)] <- 0
 sum(is.na(methylation))
 
-# Подготавливаем объединенный датафрейм
+# РџРѕРґРіРѕС‚Р°РІР»РёРІР°РµРј РѕР±СЉРµРґРёРЅРµРЅРЅС‹Р№ РґР°С‚Р°С„СЂРµР№Рј
 methilation_age <- as.data.frame(t(methylation))
 head(methilation_age[1:5, 1:5])
 methilation_age <- methilation_age[-c(1, 2,3),]
 methilation_age$age <- ages$Age
 
-# Считаем корелляцию
+# РЎС‡РёС‚Р°РµРј РєРѕСЂРµР»Р»СЏС†РёСЋ
 meth <- as.matrix(methilation_age)
 class(meth) <- "numeric"
 cor_meth <- cor(meth[,1:95], meth[,96, drop=F])
 meth <- as.data.frame(meth)
-# индексы наиболее скореллированных сайтов метилирования
+# РёРЅРґРµРєСЃС‹ РЅР°РёР±РѕР»РµРµ СЃРєРѕСЂРµР»Р»РёСЂРѕРІР°РЅРЅС‹С… СЃР°Р№С‚РѕРІ РјРµС‚РёР»РёСЂРѕРІР°РЅРёСЏ
 idx <- which(abs(cor_meth) %in% sort(abs(cor_meth), decreasing = T)[1:10])
 
+#str(meth)
+#str(methilation_age)
 ```
 
-## Предподготовка данных (machine learning)
-Теперь делим выборку на тренировочную и валидирующую.
+## РџСЂРµРґРїРѕРґРіРѕС‚РѕРІРєР° РґР°РЅРЅС‹С… (machine learning)
+РўРµРїРµСЂСЊ РґРµР»РёРј РІС‹Р±РѕСЂРєСѓ РЅР° С‚СЂРµРЅРёСЂРѕРІРѕС‡РЅСѓСЋ Рё РІР°Р»РёРґРёСЂСѓСЋС‰СѓСЋ.
 
 ```{r data_split, message=FALSE, warning=FALSE}
 set.seed(31)
 training <- sample(1:50, 40)
 validation <- (1:50)[-training]
 
-train <- methilation_age[training, c(idx, 96)]
-test <- methilation_age[validation, c(idx, 96)]
+train <- meth[training, c(idx, 96)]
+test <- meth[validation, c(idx, 96)]
 
 #write.table(train[, c(ncol(train), 1:(ncol(train) - 1))], "train.tsv", sep='\t', col.names = NA, quote = F)
 #write.table(test[, c(ncol(test), 1:(ncol(test) - 1))], "test.tsv", sep='\t', col.names = NA, quote = F)
@@ -64,9 +66,9 @@ test <- methilation_age[validation, c(idx, 96)]
 head(train)
 ```
 
-## Построение лесов
+## РџРѕСЃС‚СЂРѕРµРЅРёРµ Р»РµСЃРѕРІ
 
-### Функция-обертка
+### Р¤СѓРЅРєС†РёСЏ-РѕР±РµСЂС‚РєР°
 
 ```{r wrapper, message=FALSE, warning=FALSE}
 
@@ -94,23 +96,23 @@ wrapper <- function(train, test, runs.number=50, ...) {
 
 ```
 
-### Тестируем функцию для разных параметров
+### РўРµСЃС‚РёСЂСѓРµРј С„СѓРЅРєС†РёСЋ РґР»СЏ СЂР°Р·РЅС‹С… РїР°СЂР°РјРµС‚СЂРѕРІ
 
-1) Запуск randomForest с аргументами по умолчанию 50 раз и подсчет средней ошибки
+1) Р—Р°РїСѓСЃРє randomForest СЃ Р°СЂРіСѓРјРµРЅС‚Р°РјРё РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ 50 СЂР°Р· Рё РїРѕРґСЃС‡РµС‚ СЃСЂРµРґРЅРµР№ РѕС€РёР±РєРё
 
 ```{r tests1, message=FALSE, warning=FALSE}
 errors.defaults <- wrapper(train, test, 50)
 print(errors.defaults)
 ```
 
-2) Запуск randomForest всего с 1 деревом внутри 50 раз и подсчет средней ошибки для ntree=1 (то есть для одного дерева)
+2) Р—Р°РїСѓСЃРє randomForest РІСЃРµРіРѕ СЃ 1 РґРµСЂРµРІРѕРј РІРЅСѓС‚СЂРё 50 СЂР°Р· Рё РїРѕРґСЃС‡РµС‚ СЃСЂРµРґРЅРµР№ РѕС€РёР±РєРё РґР»СЏ ntree=1 (С‚Рѕ РµСЃС‚СЊ РґР»СЏ РѕРґРЅРѕРіРѕ РґРµСЂРµРІР°)
 
 ```{r tests2, message=FALSE, warning=FALSE}
 errors.ntree1 <- wrapper(train, test, 50, ntree=1)
 print(errors.ntree1)
 ```
 
-3) Запуск randomForest со всеми вершинами (nodesize=1), replace=F, sampsize=N, mtry=M. Пример переобучения.
+3) Р—Р°РїСѓСЃРє randomForest СЃРѕ РІСЃРµРјРё РІРµСЂС€РёРЅР°РјРё (nodesize=1), replace=F, sampsize=N, mtry=M. РџСЂРёРјРµСЂ РїРµСЂРµРѕР±СѓС‡РµРЅРёСЏ.
 
 ```{r tests3, message=FALSE, warning=FALSE}
 errors.overfit <- wrapper(train, test, 50,
@@ -118,9 +120,11 @@ errors.overfit <- wrapper(train, test, 50,
 print(errors.overfit)
 ```
 
-## Подбираем наилучшие параметры модели
+## РџРѕРґР±РёСЂР°РµРј РЅР°РёР»СѓС‡С€РёРµ РїР°СЂР°РјРµС‚СЂС‹ РјРѕРґРµР»Рё
 
-1) __ntree__
+__1) ntree__
+
+РќР°С‡РёРЅР°СЏ СЃ 50, РїР°СЂР°РјРµС‚СЂ ntree (РєРѕР»РёС‡РµСЃС‚РІРѕ РґРµСЂРµРІСЊРµРІ) РЅРµ РІР»РёСЏРµС‚ РЅР° СЂРµР·СѓР»СЊС‚Р°С‚, РїРѕС‚РѕРјСѓ С‡С‚Рѕ Р·РЅР°С‡РµРЅРёСЏ РѕС€РёР±РєРё РІС‹С…РѕРґСЏС‚ РЅР° РїР»Р°С‚Рѕ, РѕРґРЅР°РєРѕ РґР»СЏ СЃРѕС…СЂР°РЅРЅРѕСЃС‚Рё РјС‹ РІРѕР·СЊРјРµРј ntree = 100.
 
 ```{r ntree, message=FALSE, warning=FALSE}
 n <- seq(1, 250, 50)
@@ -143,7 +147,9 @@ ggplot(to_plot, aes(x = ntree, y = RMSE, col=dataset)) +
 
 ```
 
-2) __sampsize__
+__2) sampsize and replace__
+
+Р—РґРµСЃСЊ РјС‹ РїРѕРґР±РёСЂР°РµРј, РєР°РєРѕРіРѕ СЂР°Р·РјРµСЂР° РЅР°РґРѕ РІР·СЏС‚СЊ РІС‹Р±РѕСЂРєСѓ РґР»СЏ РїРѕСЃС‚СЂРѕРµРЅРёСЏ РѕС‚РґРµР»СЊРЅРѕРіРѕ РґРµСЂРµРІР° (sampsize), Рё РјРѕР¶РµРј Р»Рё РјС‹ Р±СЂР°С‚СЊ СЃ Р·Р°РјРµРЅРѕР№ РёР»Рё РЅРµС‚ (replace). РћРєР°Р·Р°Р»РѕСЃСЊ, С‡С‚Рѕ СЂР°Р·РјРµСЂ РІС‹Р±РѕСЂРєРё РґР»СЏ РґРµСЂРµРІР° РІР°Р¶РµРЅ, РїРѕС‚РѕРјСѓ С‡С‚Рѕ РµСЃР»Рё Р±СЂР°С‚СЊ СЃР»РёС€РєРѕРј Р±РѕР»СЊС€СѓСЋ РІС‹Р±РѕСЂРєСѓ, РґР° РµС‰Рµ Рё РЅРµ СЂР°Р·СЂРµС€Р°С‚СЊ Р·Р°РјРµРЅС‹, С‚Рѕ РїСЂРѕРёСЃС…РѕРґРёС‚ РїРµСЂРµРѕР±СѓС‡РµРЅРёРµ, Рё СЂР°Р·РјРµСЂ РѕС€РёР±РєРё РЅР° С‚РµСЃС‚РѕРІРѕР№ РІС‹Р±РѕСЂРєРµ РѕРїСЏС‚СЊ РїРѕР»Р·РµС‚ РІРІРµСЂС…! РџРѕСЌС‚РѕРјСѓ РјС‹ РїРѕРґРѕР±СЂР°Р»Рё РѕРїС‚РёРјР°Р»СЊРЅРѕРµ Р·РЅР°С‡РµРЅРёРµ sampsize РІ РїСЂРѕРјРµР¶СѓС‚РєРµ РѕС‚ 11 РґРѕ 20, РІС‹Р±СЂР°РІ 16, Рё СЂР°Р·Р»РµС€РёР»Рё replace.
 
 ```{r sampsize, message=FALSE, warning=FALSE}
 sam <- seq(1, 40)
@@ -167,18 +173,20 @@ to_plot <- data.frame(
 ggplot(to_plot, aes(x = sampsize, y = RMSE, col=dataset, linetype=replace)) +
   geom_line(size=1) +
   theme_bw(base_size = 14) +
-  geom_vline(xintercept = 5, lty="dashed", color="cyan")
+  geom_vline(xintercept = 16, lty="dashed", color="cyan")
 
 
-# sampsize = 5, replace = True
+# sampsize = 16, replace = True
 ```
 
-3) __nodesize__
+__3) nodesize__
+
+Р—РґРµСЃСЊ РјС‹ Р·Р°РґР°РµРј РјРёРЅРёРјР°Р»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ РєРѕРЅРµС‡РЅРѕР№ РЅРѕРґС‹, С‡С‚РѕР±С‹ РЅРµ РїСЂРѕРёСЃС…РѕРґРёР»Рѕ РїРµСЂРµРѕР±СѓС‡РµРЅРёСЏ Рё СЃРѕР·РґР°РЅРёСЏ РЅРѕРґ СЂР°Р·РјРµСЂРѕРј РІ РѕРґРёРЅ РѕР±СЂР°Р·РµС†. РќР° РіСЂР°С„РёРєРµ РІРёРґРЅРѕ, С‡С‚Рѕ СЃ СЂРѕСЃС‚РѕРј СЂР°Р·РјРµСЂР° С„РёРЅР°Р»СЊРЅРѕР№ РЅРѕРґС‹ РІРѕР·СЂР°СЃС‚Р°РµС‚ Рё РѕС€РёР±РєР°, РїСЂРёС‡РµРј РЅР° Р·РЅР°С‡РµРЅРёРё 15 РїСЂРѕРёСЃС…РѕРґРёС‚ СЂРµР·РєРёР№ СЃРєР°С‡РµРє РІ РѕР±СѓС‡РµРЅРёРё, Рё С‚РѕР»СЊРєРѕ РЅР° nodesize = 1 РѕС€РёР±РєР° С‚РµСЃС‚РѕРІРѕР№ РІС‹Р±РѕСЂРєРё РЅР°С‡РёРЅР°РµС‚ СЂР°СЃС‚Рё.
 
 ```{r nodesize, message=FALSE, warning=FALSE}
 n <- seq(1, 40)
 testing_nodesize <- sapply(n, function(x) wrapper(train, test, 
-                    runs.number=50, ntree=100, sampsize = 5, replace = T, mtry=10, nodesize=x))
+                    runs.number=50, ntree=100, sampsize = 11, replace = T, mtry=10, nodesize=x))
 
 testing_nodesize <- data.frame(n, t(testing_nodesize))
 
@@ -188,18 +196,21 @@ to_plot <- data.frame(nodesize=c(n, n), RMSE=c(testing_nodesize$RMSE_train, test
 
 ggplot(to_plot, aes(x = nodesize, y = RMSE, col=dataset)) +
   geom_line(size=2) +
-  theme_bw(base_size = 14)
+  theme_bw(base_size = 14)+
+  geom_vline(xintercept = 2, lty="dashed", color="cyan")
 
-# nodesize 5
+# nodesize 2
 
 ```
 
-4) __mtry__
+__4) mtry__
+
+Р­С‚РѕС‚ РїР°СЂР°РјРµС‚СЂ РѕРїСЂРµРґРµР»СЏРµС‚ РєРѕР»РёС‡РµСЃС‚РІРѕ РїРµСЂРµРјРµРЅРЅС‹С…, РєРѕС‚РѕСЂС‹Рµ СЂР°РЅРґРѕРјРЅРѕ РѕС‚Р±РёСЂР°СЋС‚СЃСЏ РєР°Рє РєР°РЅРґРёРґР°С‚С‹ РЅР° СЂР°Р·РґРµР»РµРЅРёРµ РІРµС‚РІРµР№.
 
 ```{r mtry, message=FALSE, warning=FALSE}
 n <- seq(1, 10)
 testing_mtry <- sapply(n, function(x) wrapper(train, test, 
-                    runs.number=50, ntree=100, sampsize = 5, replace = T, mtry=x, nodesize=5))
+                    runs.number=50, ntree=100, sampsize = 11, replace = T, mtry=x, nodesize=2))
 
 testing_mtry <- data.frame(n, t(testing_mtry))
 
@@ -209,13 +220,14 @@ to_plot <- data.frame(mtry=c(n, n), RMSE=c(testing_mtry$RMSE_train, testing_mtry
 
 ggplot(to_plot, aes(x = mtry, y = RMSE, col=dataset)) +
   geom_line(size=2) +
-  theme_bw(base_size = 14)
+  theme_bw(base_size = 14)+
+  geom_vline(xintercept = 4, lty="dashed", color="cyan")
 
-# mtry = 5
+# mtry = 4
 ```
 
-## Кросс-валидация
-И вот, когда мы подобрали все параметры, надо проверить, всё ли действительно так, как кажется. И мы проводим кросс-валидацию, разбивая изначальные данные на пять выборок.
+## РљСЂРѕСЃСЃ-РІР°Р»РёРґР°С†РёСЏ
+Р РІРѕС‚, РєРѕРіРґР° РјС‹ РїРѕРґРѕР±СЂР°Р»Рё РІСЃРµ РїР°СЂР°РјРµС‚СЂС‹, РЅР°РґРѕ РїСЂРѕРІРµСЂРёС‚СЊ, РІСЃС‘ Р»Рё РґРµР№СЃС‚РІРёС‚РµР»СЊРЅРѕ С‚Р°Рє, РєР°Рє РєР°Р¶РµС‚СЃСЏ. Р РјС‹ РїСЂРѕРІРѕРґРёРј РєСЂРѕСЃСЃ-РІР°Р»РёРґР°С†РёСЋ, СЂР°Р·Р±РёРІР°СЏ РёР·РЅР°С‡Р°Р»СЊРЅС‹Рµ РґР°РЅРЅС‹Рµ РЅР° РїСЏС‚СЊ РІС‹Р±РѕСЂРѕРє.
 
 ```{r cross_validation_setup, message=FALSE, warning=FALSE}
 
@@ -228,7 +240,7 @@ cross.validation
 meth_for_cross <- cbind(meth[,idx], age=meth[,96])
 ```
 
-И считаем, что получилось:
+Р СЃС‡РёС‚Р°РµРј, С‡С‚Рѕ РїРѕР»СѓС‡РёР»РѕСЃСЊ:
 
 ```{r cross_validation, message=FALSE, warning=FALSE}
 
@@ -249,15 +261,15 @@ crvalid <- function(cross.validation, meth_for_cross, runs.number=100, ...){
 
 ```
 
-## Результаты кросс-валидации
-Модель работает, только результаты параметров randomForest по умолчанию срабатывают лучше, чем подобранные вручную.
+## Р РµР·СѓР»СЊС‚Р°С‚С‹ РєСЂРѕСЃСЃ-РІР°Р»РёРґР°С†РёРё
+РњРѕРґРµР»СЊ СЂР°Р±РѕС‚Р°РµС‚, С‚РѕР»СЊРєРѕ СЂРµР·СѓР»СЊС‚Р°С‚С‹ РїР°СЂР°РјРµС‚СЂРѕРІ randomForest РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ СЃСЂР°Р±Р°С‚С‹РІР°СЋС‚ Р»СѓС‡С€Рµ, С‡РµРј РїРѕРґРѕР±СЂР°РЅРЅС‹Рµ РІСЂСѓС‡РЅСѓСЋ.
 
 ```{r answer, message=FALSE, warning=FALSE}
 # Default
 print(crvalid(cross.validation, meth_for_cross))
 
 # Set
-print(crvalid(cross.validation, meth_for_cross, ntree=100, sampsize = 5, replace = T, mtry=3, nodesize=5))
+print(crvalid(cross.validation, meth_for_cross, ntree=100, sampsize = 16, replace = T, mtry=4, nodesize=2))
 
 ```
 
