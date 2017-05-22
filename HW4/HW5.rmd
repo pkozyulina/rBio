@@ -34,9 +34,10 @@ methilation_age <- methilation_age[-c(1, 2,3),]
 methilation_age$age <- ages$Age
 
 # Считаем корелляцию
-meth <- mutate_all(methilation_age, funs(as.numeric(.)))
-cor_meth <- cor(meth[,1:95], meth$age)
-
+meth <- as.matrix(methilation_age)
+class(meth) <- "numeric"
+cor_meth <- cor(meth[,1:95], meth[,96, drop=F])
+meth <- as.data.frame(meth)
 # индексы наиболее скореллированных сайтов метилирования
 idx <- which(abs(cor_meth) %in% sort(abs(cor_meth), decreasing = T)[1:10])
 
@@ -46,12 +47,19 @@ idx <- which(abs(cor_meth) %in% sort(abs(cor_meth), decreasing = T)[1:10])
 Теперь делим выборку на тренировочную и валидирующую.
 
 ```{r data_split, message=FALSE, warning=FALSE}
-set.seed(17)
+set.seed(31)
 training <- sample(1:50, 40)
 validation <- (1:50)[-training]
 
 train <- methilation_age[training, c(idx, 96)]
 test <- methilation_age[validation, c(idx, 96)]
+
+#write.table(train[, c(ncol(train), 1:(ncol(train) - 1))], "train.tsv", sep='\t', col.names = NA, quote = F)
+#write.table(test[, c(ncol(test), 1:(ncol(test) - 1))], "test.tsv", sep='\t', col.names = NA, quote = F)
+
+#train_k <- read.table("from_K/train.tsv", sep="\t", header=1, row.names = 1)
+#train_p <- read.table("train.tsv", sep="\t", header = 1, row.names=1)
+#train_k == train_p
 
 head(train)
 ```
@@ -114,8 +122,8 @@ print(errors.overfit)
 
 1) __ntree__
 
-```{r ntree, cache=TRUE, message=FALSE, warning=FALSE}
-n <- seq(1, 1000, 50)
+```{r ntree, message=FALSE, warning=FALSE}
+n <- seq(1, 250, 50)
 testing_ntree <- sapply(n, function(x) wrapper(train, test, 
                     runs.number=50, ntree=x))
 
@@ -123,25 +131,28 @@ testing_ntree <- data.frame(n, t(testing_ntree))
 
 to_plot <- data.frame(ntree = c(n, n), 
                       RMSE=c(testing_ntree$RMSE_train, testing_ntree$RMSE_test),
-                      dataset=c(rep("train", 20), rep("test", 20)))
-  
+                      dataset=c(rep("train", 5), rep("test", 5)))
+
 
 ggplot(to_plot, aes(x = ntree, y = RMSE, col=dataset)) +
   geom_line(size=2) +
-  theme_bw(base_size = 14)
+  theme_bw(base_size = 14) +
+  geom_vline(xintercept = 50, lty="dashed", color="cyan")
+
+# ntree = 100
 
 ```
 
 2) __sampsize__
 
-```{r sampsize, cache=TRUE, message=FALSE, warning=FALSE}
+```{r sampsize, message=FALSE, warning=FALSE}
 sam <- seq(1, 40)
 
 testing_replace_T <- sapply(sam, function(x) wrapper(train, test, 
-                    runs.number=50, ntree=20, replace = T, sampsize = x))
+                    runs.number=50, ntree=100, mtry=10, nodesize = 1, replace = T, sampsize = x))
 
 testing_replace_F <- sapply(sam, function(x) wrapper(train, test, 
-                    runs.number=50, ntree=20, replace = F, sampsize = x))
+                    runs.number=50, ntree=100, mtry=10, nodesize = 1, replace = F, sampsize = x))
 
 testing_sampsize_T <- data.frame(n, t(testing_replace_T))
 testing_sampsize_F <- data.frame(n, t(testing_replace_F))
@@ -154,19 +165,20 @@ to_plot <- data.frame(
 
 
 ggplot(to_plot, aes(x = sampsize, y = RMSE, col=dataset, linetype=replace)) +
-  geom_line(size=2) +
-  theme_bw(base_size = 14)
+  geom_line(size=1) +
+  theme_bw(base_size = 14) +
+  geom_vline(xintercept = 5, lty="dashed", color="cyan")
 
 
-# sampsize = 20, replace = False
+# sampsize = 5, replace = True
 ```
 
 3) __nodesize__
 
-```{r nodesize, cache=TRUE, message=FALSE, warning=FALSE}
+```{r nodesize, message=FALSE, warning=FALSE}
 n <- seq(1, 40)
 testing_nodesize <- sapply(n, function(x) wrapper(train, test, 
-                    runs.number=50, ntree=20, sampsize=20, mtry=10, nodesize=x))
+                    runs.number=50, ntree=100, sampsize = 5, replace = T, mtry=10, nodesize=x))
 
 testing_nodesize <- data.frame(n, t(testing_nodesize))
 
@@ -178,16 +190,16 @@ ggplot(to_plot, aes(x = nodesize, y = RMSE, col=dataset)) +
   geom_line(size=2) +
   theme_bw(base_size = 14)
 
-# nodesize 7 or 15
+# nodesize 5
 
 ```
 
 4) __mtry__
 
-```{r mtry, cache=TRUE, message=FALSE, warning=FALSE}
+```{r mtry, message=FALSE, warning=FALSE}
 n <- seq(1, 10)
 testing_mtry <- sapply(n, function(x) wrapper(train, test, 
-                    runs.number=50, ntree=20, sampsize=20, mtry=x, nodesize=15))
+                    runs.number=50, ntree=100, sampsize = 5, replace = T, mtry=x, nodesize=5))
 
 testing_mtry <- data.frame(n, t(testing_mtry))
 
@@ -199,7 +211,7 @@ ggplot(to_plot, aes(x = mtry, y = RMSE, col=dataset)) +
   geom_line(size=2) +
   theme_bw(base_size = 14)
 
-# mtry = 3
+# mtry = 5
 ```
 
 ## Кросс-валидация
@@ -207,18 +219,18 @@ ggplot(to_plot, aes(x = mtry, y = RMSE, col=dataset)) +
 
 ```{r cross_validation_setup, message=FALSE, warning=FALSE}
 
-set.seed(1)
+set.seed(31)
 
 # splitting our dataset into 5 equal parts
 cross.validation <- matrix(sample(1:50, 50), nrow=5, ncol=10)
 cross.validation
 
-meth_for_cross <- cbind(meth[idx], age=ages$Age)
+meth_for_cross <- cbind(meth[,idx], age=meth[,96])
 ```
 
 И считаем, что получилось:
 
-```{r cross_validation, cache=TRUE, message=FALSE, warning=FALSE}
+```{r cross_validation, message=FALSE, warning=FALSE}
 
 crvalid <- function(cross.validation, meth_for_cross, runs.number=100, ...){
   cross.results <- apply(cross.validation, 1, function(test.sample){
@@ -245,7 +257,7 @@ crvalid <- function(cross.validation, meth_for_cross, runs.number=100, ...){
 print(crvalid(cross.validation, meth_for_cross))
 
 # Set
-print(crvalid(cross.validation, meth_for_cross, ntree=20, sampsize = 20, mtry=3, nodesize=15, replace=F))
+print(crvalid(cross.validation, meth_for_cross, ntree=100, sampsize = 5, replace = T, mtry=3, nodesize=5))
 
 ```
 
